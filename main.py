@@ -2,7 +2,6 @@ from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from dotenv import load_dotenv
-from datetime import datetime, timedelta
 import google.generativeai as genai
 import os
 
@@ -17,28 +16,39 @@ app = FastAPI()
 class QuestionRequest(BaseModel):
     question: str
 
+def is_programming_related(question: str) -> bool:
+    programming_keywords = {
+        'python', 'javascript', 'java', 'c++', 'code', 'programming', 'function', 
+        'class', 'variable', 'loop', 'array', 'list', 'dictionary', 'api', 
+        'database', 'sql', 'framework', 'library', 'debug', 'error', 'exception',
+        'algorithm', 'data structure', 'git', 'html', 'css', 'react', 'node',
+        'django', 'flask', 'fastapi', 'express', 'compiler', 'interpreter',
+        'string', 'integer', 'boolean', 'syntax', 'backend', 'frontend',
+        'development', 'coding', 'software', 'developer', 'web', 'server'
+    }
+    
+    question_words = set(question.lower().split())
+    return any(keyword in question.lower() for keyword in programming_keywords)
 
 @app.post("/ask")
 async def ask_question(query: QuestionRequest):
-    question = query.question.strip().lower()
+    question = query.question.strip()
+    
+    # Check if the question is programming-related
+    if not is_programming_related(question):
+        return JSONResponse(
+            status_code=400,
+            content={
+                "answer": "I can only help with programming-related questions. Please ask something about coding, programming languages, software development, or related technical topics."
+            }
+        )
 
-    # Handle local logic for date/time
-    if "yesterday" in question:
-        yesterday = (datetime.now() - timedelta(days=1)).strftime('%A, %B %d, %Y')
-        return {"answer": f"Yesterday was {yesterday}."}
-    elif "today" in question or "date" in question:
-        today = datetime.now().strftime('%A, %B %d, %Y')
-        return {"answer": f"Today's date is {today}."}
-    elif "time" in question:
-        current_time = datetime.now().strftime('%I:%M %p')
-        return {"answer": f"The current time is {current_time}."}
-
-    # Use Gemini Pro with simpler prompt
+    # Use Gemini Pro with programming-focused prompt
     try:
         prompt = f"""
-Please provide a concise answer to the following question. 
-Answer should be direct and to the point, without sections or emojis.
-If the question is about a programming concept, include one short code example if relevant.
+Please provide a concise, technical answer to the following programming question.
+Focus only on programming concepts, implementation details, and code examples.
+If the question is not clearly about programming, respond that you can only help with programming questions.
 
 Question: {question}
 """
@@ -48,6 +58,9 @@ Question: {question}
         return {"answer": response.text.strip()}
 
     except Exception as e:
-        return JSONResponse(status_code=500, content={
-            "answer": f"Error: {str(e)}. Check your Gemini API key or usage quota."
-        })
+        return JSONResponse(
+            status_code=500,
+            content={
+                "answer": f"Error: {str(e)}. Check your Gemini API key or usage quota."
+            }
+        )
